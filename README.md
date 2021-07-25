@@ -1,15 +1,18 @@
 # Curtain & Sync Modes for OpenSeadragon
 
-This library is an extension for [OpenSeadragon](https://openseadragon.github.io/#) that enables side-by-side, syncronized image viewing. This extension will add the "curtain" and "sync" view modes to any OpenSeadragon viewer.
+This library is an extension for [OpenSeadragon](https://openseadragon.github.io/#) and represents a modified version of https://github.com/cuberis/openseadragon-curtain-sync that enables side-by-side, synchronized image viewing. This extension provides handles for additional layers with overlay controls as well as a visible 'nubbin' to ui for controlling the position of the curtain. It is part of a set of small tools that enable interaction between the sketchfab api (see sketchfab fade) and iiif images.
 
-**Curtain mode** overlays images on top of each other and reveals more or less of each image based on your cursor position.
+Based on the original curtain sync plugin
+**Curtain mode** overlays images on top of each other and reveals more or less of each image based on the position of the nubbin. Multiple images can be loaded into the stack, but only the first 2 are split in the curtain (a third is an option using original code) with later layers as full-viewer overlays that can have their opacity modified.
 
+currently deprecated
 **Sync mode** shows images side-by-side but keeps each image in sync as the user zooms or pans.
 
-## Demo
-[View the demo here](https://cuberis.github.io/openseadragon-curtain-sync/demo/)
 
-*\*All images courtesy of The Leiden Collection*
+
+## findme todo:  This readme has been forked from https://github.com/cuberis/openseadragon-curtain-sync and is currently being re-written
+## all hats off to https://github.com/cuberis/openseadragon-curtain-sync
+##----------------------------------------------------------------------------------------------------------------------------------------
 
 ## Install
 1. [Download and install OpenSeadragon](https://openseadragon.github.io/#download).
