@@ -173,15 +173,6 @@
         });
       });
 
-      //findme to-do: paramatize to pass in array object and build.
-      var elt = document.createElement("div");
-        elt.id = "runtime-overlay";
-        elt.className = "highlight highlight-hidden";
-        self.viewer.addOverlay({
-            element: elt,
-            location: new OpenSeadragon.Rect(0.0138, 0.07, 0.535, 0.045)
-        });
-
 
 //    self.setImages (this.images);
 
@@ -233,17 +224,14 @@
 
       layerImages[layer].curtain.tiledImage.setOpacity(opacity);
     },
-/* findme to do: enable dynamic overlay addition
-    // ----------
-    addOverlay: function () {
-      this.viewer.addOverlay(overlays);
+
+    // findme added ----------
+    // returns the view object
+    getViewer: function () {
+      return this.viewer;
     },
 
-    // ----------
-    removeOverlay: function (overlayID) {
-      this.viewer.removeOverlay(overlayID);
-    },
-*/
+
     // ----------
     startingPan: function () {
       return self.startingPan;
@@ -608,6 +596,14 @@
 
     },
 
+
+    // findme added ----------
+    // returns the view object
+    getViewer: function () {
+      return this.mode.getViewer();
+    },
+
+
     // ----------
     getZoom: function () {
       return this.mode.getZoom();
@@ -693,21 +689,7 @@
     setLayerOpacity: function (level,opacity,split) {
       this.mode.setLayerOpacity(level,opacity,split);
     },
-/* findme to do: enable dynamic overlay addition
-    // ----------
-    //findme : added
-    addOverlay: function (overlays) {
-      console.log('add overlays: ');
-      this.mode.addOverlay(overlays);
-    },
 
-    // ----------
-    //findme : added
-    removeOverlay: function (overlayID) {
-      console.log('remove overlays: ');
-      this.mode.removeOverlay(overlayID);
-    },
-*/
     // ----------
     //findme : added
     setLayerSource (level, opacity) {
