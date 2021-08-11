@@ -2,14 +2,32 @@
 
 (function () {
 
+/* findme note:
+    This is a provisional modification to curtain-sync plugin. It currently require a div with ID 'nubbin' that is used as a handle for the curtain effect.
+    Other setup is similar tot he original plugin but now takes isCurtain option to set which images are used in the split view, and which are in 100% overlays
+*/
+
+
   // Ensure the console is here; some versions of IE need this.
   window.console = window.console || {};
   window.console.assert = window.console.assert || function () { };
   window.console.error = window.console.error || function () { };
 
+  //get the drag nubbin
+  //findme to do: Build the nubbin in code
+  var dragItem = document.getElementById("nubbin");
+  var dragItemW = dragItem.offsetWidth/2;
+  var dragItemH = dragItem.offsetHeight/2;
+
   // ----------
   var CurtainMode = function (args) {
     var self = this;
+
+/*
+    findme deprecated: used for synced viewers
+    // get all osd viewers in the document for syncing
+    var osdViewers = document.getElementsByClassName('osdViewer');
+*/
 
     this.images = args.images;
     this.startingZoom = args.zoom;
@@ -29,57 +47,94 @@
 
     var ops = args.osdOptions;
     ops.element = args.container;
+
+    //passes arguments to build the osd viewer
     this.viewer = OpenSeadragon(ops);
 
     this.viewer.canvas.style.outline = 'none'; // so we don't see the browser's selection rectangle when we click
 
-    this.tracker = new OpenSeadragon.MouseTracker({
-      element: this.viewer.canvas,
-      moveHandler: function (event) {
-        if (self.isMobile) {
-          return;
-        }
 
-        self.dragClip(event.position, true, true);
-      },
-      pressHandler: function (event) {
-        if (!self.isMobile) {
-          return;
-        }
+    // drag slider handler
+    //findme added: code to use a nubbin instead of just the mouse
+    //findme ref: https://www.kirupa.com/html5/drag.htm
 
-        var shownImages = self.getShownImages();
-        if (shownImages.length <= 1) {
-          return;
-        }
+    var active = false;
+    var currentX;
+    var currentY;
+    var initialX;
+    var initialY;
+    var xOffset = 0;
+    var yOffset = 0;
 
-        var viewerPos = new OpenSeadragon.Point(self.viewer.container.clientWidth * self.clipFactorX,
-          self.viewer.container.clientHeight * self.clipFactorY);
+    dragItem.addEventListener("touchstart", dragStart, false);
+    dragItem.addEventListener("touchend", dragEnd, false);
+    dragItem.addEventListener("touchmove", drag, false);
 
-        var threshold = 20;
+    document.addEventListener("mousedown", dragStart, false);
+    document.addEventListener("mouseup", dragEnd, false);
+    document.addEventListener("mousemove", drag, false);
 
-        if (shownImages.length === 2) {
-          if (Math.abs(viewerPos.x - event.position.x) < threshold) {
-            self.isDraggingClipX = true;
-          }
-        } else if (shownImages.length === 3) {
-          if (Math.abs(viewerPos.x - event.position.x) < threshold && event.position.y < viewerPos.y + threshold) {
-            self.isDraggingClipX = true;
-          }
-
-          if (Math.abs(viewerPos.y - event.position.y) < threshold) {
-            self.isDraggingClipY = true;
-          }
-        }
-      },
-      releaseHandler: function (event) {
-        self.isDraggingClipX = false;
-        self.isDraggingClipY = false;
+    function dragStart(e) {
+      if (e.type === "touchstart") {
+        initialX = e.touches[0].clientX - xOffset;
+        initialY = e.touches[0].clientY - yOffset;
+      } else {
+        initialX = e.clientX - xOffset;
+        initialY = e.clientY - yOffset;
       }
-    });
+
+      if (e.target === dragItem) {
+        active = true;
+      }
+    }
+
+    function dragEnd(e) {
+      initialX = currentX;
+      initialY = currentY;
+
+      active = false;
+    }
+
+    function drag(e) {
+      if (active) {
+
+        e.preventDefault();
+
+        // findme todo: add container buffer
+        if (e.type === "touchmove") {
+            currentX = e.touches[0].clientX - dragItemW;
+            currentY = e.touches[0].clientY - dragItemH;
+
+        } else {
+          currentX = e.clientX - dragItemW;
+          currentY = e.clientY - dragItemH;
+        }
+
+        xOffset = currentX ;
+        yOffset = currentY;
+
+        setTranslate(currentX, currentY, dragItem);
+        self.dragClip(currentX,currentY, true, true);
+
+      }
+    }
+
+    function setTranslate(xPos, yPos, el) {
+    //original uses css transform style to move nubbin smoother?
+    //  el.style.transform = "translate3d(" + xPos + "px, " + yPos + "px, 0)";
+
+    //adjusted uses actual position elements prevents creap error
+      dragItem.style.left = currentX + 'px';
+      dragItem.style.top = currentY + 'px';
+    }
+
 
     this.viewer.addHandler('viewport-change', function () {
       self.updateClip();
-      self.raiseEvent('change:viewport');
+      // suppress the viewport update on the underlying viewer to reduce event calls
+      if (ops.id === 'viewer2') {
+        self.raiseEvent('change:viewport');
+      }
     });
 
     this.viewer.addHandler('add-item-failed', function (event) {
@@ -87,38 +142,54 @@
     });
 
     this.viewer.addHandler('canvas-drag', function (event) {
+      // makes sure the images are clipped when dragging the canvas around
       if (!self.isDraggingClipX && !self.isDraggingClipY) {
         return;
       }
-
-      event.preventDefaultAction = true;
-      self.dragClip(event.position, self.isDraggingClipX, self.isDraggingClipY);
     });
 
-    this.images.forEach(function (image, i) {
-      image.curtain = {};
 
-      self.viewer.addTiledImage({
-        tileSource: image.tileSource,
-        opacity: image.shown,
-        success: function (event) {
-          image.curtain.tiledImage = event.item;
-          image.curtain.tiledImage.setOpacity(image.shown ? 1 : 0);
+      self.images.forEach(function (image, i) {
+        image.curtain = {};
 
-          if (i === 0) {
-            if (self.startingZoom) {
-              self.viewer.viewport.zoomTo(self.startingZoom, null, true);
+        self.viewer.addTiledImage({
+          tileSource: image.tileSource,
+          opacity: image.shown,
+          success: function (event) {
+            image.curtain.tiledImage = event.item;
+            image.curtain.tiledImage.setOpacity(image.shown ? 1 : 0);
+
+            if (i === 0) {
+              if (self.startingZoom) {
+                self.viewer.viewport.zoomTo(self.startingZoom, null, true);
+              }
+
+              if (self.startingPan) {
+                self.viewer.viewport.panTo(self.startingPan, true);
+              }
             }
-
-            if (self.startingPan) {
-              self.viewer.viewport.panTo(self.startingPan, true);
-            }
+            self.updateClip();
           }
-
-          self.updateClip();
-        }
+        });
       });
-    });
+
+      //findme to-do: paramatize to pass in array object and build.
+      var elt = document.createElement("div");
+        elt.id = "runtime-overlay";
+        elt.className = "highlight highlight-hidden";
+        self.viewer.addOverlay({
+            element: elt,
+            location: new OpenSeadragon.Rect(0.0138, 0.07, 0.535, 0.045)
+        });
+
+
+//    self.setImages (this.images);
+
+
+    //initialise the clipping based on the nubbin
+    self.dragClip(dragItem.offsetLeft, dragItem.offsetTop, true, true);
+
+
   };
 
   // ----------
@@ -129,11 +200,55 @@
         delete image.curtain;
       });
 
-      this.tracker.destroy();
       this.viewer.destroy();
     },
 
+
     // ----------
+    // findme addition: changes the image sources
+    replaceImages: function (images) {
+      this.setMode('curtain',images);
+    /*
+      this.images.forEach(function (image) {
+        delete image.curtain;
+      });
+      this.viewer.destroy();
+
+      this.setImages (images);*/
+
+    },
+
+
+
+    // ----------
+    // findme addition: sets the opacity of an overlay layer (not base split view layers)
+    setLayerOpacity: function (layer, opacity, split) {
+      console.log(split);
+      if (split) {
+        layer = 1;
+        var layerImages = this.getShownImages();
+      }else{
+        var layerImages = this.getLayerImages();
+      }
+
+      layerImages[layer].curtain.tiledImage.setOpacity(opacity);
+    },
+/* findme to do: enable dynamic overlay addition
+    // ----------
+    addOverlay: function () {
+      this.viewer.addOverlay(overlays);
+    },
+
+    // ----------
+    removeOverlay: function (overlayID) {
+      this.viewer.removeOverlay(overlayID);
+    },
+*/
+    // ----------
+    startingPan: function () {
+      return self.startingPan;
+    },
+
     getZoom: function () {
       return this.viewer.viewport.getZoom();
     },
@@ -175,14 +290,18 @@
     },
 
     // ----------
+    // clips the images
     updateClip: function () {
       var viewerPos = new OpenSeadragon.Point(this.viewer.container.clientWidth * this.clipFactorX,
         this.viewer.container.clientHeight * this.clipFactorY);
 
       var viewportPos = this.viewer.viewport.pointFromPixel(viewerPos, true);
       var tiledImage, imageSize, imagePos, clip;
+      var allImages = this.getShownImages();
       var shownImages = this.getShownImages();
 
+      // findme to do - make apply to all plsit layers and drop the 2-way split
+      // 1 way split
       if (shownImages.length > 1) {
         tiledImage = shownImages[1].curtain.tiledImage;
         if (tiledImage) {
@@ -194,6 +313,7 @@
         }
       }
 
+      // 2-way split
       if (shownImages.length > 2) {
         tiledImage = shownImages[2].curtain.tiledImage;
         if (tiledImage) {
@@ -207,24 +327,36 @@
     },
 
     // ----------
-    dragClip: function (position, dragX, dragY) {
+    dragClip: function (xPos, yPos, dragX, dragY) {
+
       if (dragX) {
-        this.clipFactorX = position.x / this.viewer.container.clientWidth;
+        this.clipFactorX = (xPos +  dragItemW/2) / this.viewer.container.clientWidth;
       }
 
       if (dragY) {
-        this.clipFactorY = position.y / this.viewer.container.clientHeight;
+        this.clipFactorY = (yPos + dragItemH/2) / this.viewer.container.clientHeight;
       }
 
       this.updateClip();
     },
 
+
     // ----------
     getShownImages: function () {
       return this.images.filter(function (image) {
-        return image.shown;
+        /*findme note: returns a list of visible, curtain view images*/
+        return image.shown && image.isCurtain;
+      });
+    },
+
+    /* findme addition: gets an array of the overlay layers */
+    // ----------
+    getLayerImages: function () {
+      return this.images.filter(function (image) {
+        return !image.isCurtain;
       });
     }
+
   }, OpenSeadragon.EventSource.prototype);
 
   // ----------
@@ -246,26 +378,27 @@
     this.images.forEach(function (image, i) {
       image.sync = {};
 
-      image.sync.container = document.createElement('div');
-      image.sync.container.style.flexGrow = 1;
-      self.innerContainer.appendChild(image.sync.container);
-
+      image.sync.container = document.createElement('div'); // makes a frame for OSD viewer
+      image.sync.container.style.flexGrow = 1; // enables auto resize flexbox
+      self.innerContainer.appendChild(image.sync.container);  //adds the container for the canvas
+      //hides any non displayed images
       if (!image.shown) {
         image.sync.container.style.display = 'none';
       }
 
-      var ops = args.osdOptions;
-      ops.element = image.sync.container;
-      ops.tileSources = image.tileSource;
-      image.sync.viewer = OpenSeadragon( ops );
+      var ops = args.osdOptions; //gets initial arguments for the viewer
+      ops.element = image.sync.container; // tells OSD which container to use as viewer frame
+      ops.tileSources = image.tileSource; // tells OSD the tilesource
+      image.sync.viewer = OpenSeadragon( ops ); // create OSD instance
 
       image.sync.viewer.canvas.style.outline = 'none'; // so we don't see the browser's selection rectangle when we click
 
+      // handler to set the starting zoom/pan locations to be in sync
       image.sync.viewer.addHandler('open', function () {
         if (self.startingZoom) {
           image.sync.viewer.viewport.zoomTo(self.startingZoom, null, true);
         }
-
+        // catch if viewer is panning
         if (self.startingPan) {
           image.sync.viewer.viewport.panTo(self.startingPan, true);
         } else {
@@ -279,6 +412,7 @@
         self.raiseEvent('add-item-failed', event);
       });
 
+      // propogates pan and zoom to other images
       var changeHandler = function () {
         if (self.leadingImage && self.leadingImage !== image) {
           return;
@@ -297,6 +431,7 @@
         self.leadingImage = null;
       };
 
+      // hooks that listen to changes in zoom state on the current viewer
       image.sync.viewer.addHandler('zoom', function () {
         changeHandler();
       });
@@ -369,8 +504,11 @@
     // ----------
     updateImageShown: function (image) {
       image.sync.container.style.display = image.shown ? 'block' : 'none';
-    }
+    },
+
   }, OpenSeadragon.EventSource.prototype);
+
+
 
   // ----------
   window.CurtainSyncViewer = function (args) {
@@ -390,6 +528,7 @@
     this.osdOptions = args.osdOptions || {};
     this.osdOptions.showNavigationControl = false; // hardcode to override this option
 
+
     if (getComputedStyle(this.container).position === 'static') {
       this.container.style.position = 'relative';
     }
@@ -401,13 +540,16 @@
       var image = {
         key: argsImage.key,
         tileSource: argsImage.tileSource,
-        shown: !!argsImage.shown
+        shown: !!argsImage.shown,
+        isCurtain: !!argsImage.isCurtain
       };
 
       self.images.push(image);
     });
 
     this.setMode(args.mode || 'curtain');
+
+
   };
 
   // ----------
@@ -418,12 +560,17 @@
     },
 
     // ----------
-    setMode: function (key) {
+    setMode: function (key, images) {
       var self = this;
 
       console.assert(key === 'curtain' || key === 'sync', '[CurtainSyncViewer.setMode] Must have valid key.');
-      if (key === this.modeKey) {
+      if (key === this.modeKey && !images) {
         return;
+      }
+
+      if (images) {
+        console.log('set mode');
+        this.images = images;
       }
 
       if (this.mode) {
@@ -458,6 +605,7 @@
       });
 
       this.raiseEvent('change:mode');
+
     },
 
     // ----------
@@ -489,6 +637,7 @@
       return this.mode.getPan();
     },
 
+
     // ----------
     setPan: function (pan) {
       console.assert(typeof pan === 'object' && typeof pan.x === 'number' && typeof pan.y === 'number',
@@ -498,12 +647,14 @@
       this.handleViewportChange();
     },
 
+    //findme: possibly deprecated?
     // ----------
     getImageShown: function (key) {
       var shown = false;
       this.images.forEach(function (image) {
-        if (image.key === key && image.shown) {
+        if (image.key === key && image.shown && image.curtain) {
           shown = true;
+          curtain = true;
         }
       });
 
@@ -528,6 +679,39 @@
           key: key
         });
       }
+    },
+
+    // ----------
+    //findme : added
+    replaceImages : function (images) {
+      console.log(images);
+      this.mode.replaceImages(images);
+    },
+
+    // ----------
+    //findme : added
+    setLayerOpacity: function (level,opacity,split) {
+      this.mode.setLayerOpacity(level,opacity,split);
+    },
+/* findme to do: enable dynamic overlay addition
+    // ----------
+    //findme : added
+    addOverlay: function (overlays) {
+      console.log('add overlays: ');
+      this.mode.addOverlay(overlays);
+    },
+
+    // ----------
+    //findme : added
+    removeOverlay: function (overlayID) {
+      console.log('remove overlays: ');
+      this.mode.removeOverlay(overlayID);
+    },
+*/
+    // ----------
+    //findme : added
+    setLayerSource (level, opacity) {
+      this.mode.setLayerSource(level,opacity);
     },
 
     // ----------
