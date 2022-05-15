@@ -1,34 +1,36 @@
 'use strict';
 
+/* =================================================
+findme ref: original code based on https://github.com/cuberis/openseadragon-curtain-sync
+please see original license if you wish to use this code.
+================================================= */
+
 (function () {
-
-/* findme note:
-    This is a provisional modification to curtain-sync plugin. It currently require a div with ID 'nubbin' that is used as a handle for the curtain effect.
-    Other setup is similar tot he original plugin but now takes isCurtain option to set which images are used in the split view, and which are in 100% overlays
-*/
-
 
   // Ensure the console is here; some versions of IE need this.
   window.console = window.console || {};
   window.console.assert = window.console.assert || function () { };
   window.console.error = window.console.error || function () { };
 
+
+  //findme todo: remove or replace
+  // ties the viewer to related nubbin to avoid conflicts
+
   //get the drag nubbin
-  //findme to do: Build the nubbin in code
   var dragItem = document.getElementById("nubbin");
   var dragItemW = dragItem.offsetWidth/2;
   var dragItemH = dragItem.offsetHeight/2;
+
+
 
   // ----------
   var CurtainMode = function (args) {
     var self = this;
 
-/*
-    findme deprecated: used for synced viewers
+/*findme deprecated: used for synced viewers
     // get all osd viewers in the document for syncing
     var osdViewers = document.getElementsByClassName('osdViewer');
 */
-
     this.images = args.images;
     this.startingZoom = args.zoom;
     this.startingPan = args.pan;
@@ -48,6 +50,8 @@
     var ops = args.osdOptions;
     ops.element = args.container;
 
+
+    //findme: console.log('ops = ',ops);
     //passes arguments to build the osd viewer
     this.viewer = OpenSeadragon(ops);
 
@@ -55,8 +59,8 @@
 
 
     // drag slider handler
-    //findme added: code to use a nubbin instead of just the mouse
-    //findme ref: https://www.kirupa.com/html5/drag.htm
+    // findme added: code to use a nubbin instead of just the mouse
+      // findme ref: https://www.kirupa.com/html5/drag.htm
 
     var active = false;
     var currentX;
@@ -104,16 +108,17 @@
         if (e.type === "touchmove") {
             currentX = e.touches[0].clientX - dragItemW;
             currentY = e.touches[0].clientY - dragItemH;
-
         } else {
           currentX = e.clientX - dragItemW;
           currentY = e.clientY - dragItemH;
         }
 
-        xOffset = currentX ;
+        xOffset = currentX;
         yOffset = currentY;
 
+        // sets the position of the nubbin
         setTranslate(currentX, currentY, dragItem);
+        // sets the position of the layer clipping
         self.dragClip(currentX,currentY, true, true);
 
       }
@@ -177,9 +182,8 @@
 //    self.setImages (this.images);
 
 
-    //initialise the clipping based on the nubbin
-    self.dragClip(dragItem.offsetLeft, dragItem.offsetTop, true, true);
 
+    self.setSplit();
 
   };
 
@@ -195,26 +199,30 @@
     },
 
 
+
     // ----------
     // findme addition: changes the image sources
     replaceImages: function (images) {
-      this.setMode('curtain',images);
-    /*
+    //  this.mode.setMode('curtain',images);
+
       this.images.forEach(function (image) {
         delete image.curtain;
       });
       this.viewer.destroy();
 
-      this.setImages (images);*/
+      setImageShown('curtain', images);
 
     },
 
+    //findme addition: updates the image split based on current nubbin position.
+    setSplit : function () {
+      this.dragClip(dragItem.offsetLeft, dragItem.offsetTop, true, true);
+    },
 
 
     // ----------
     // findme addition: sets the opacity of an overlay layer (not base split view layers)
     setLayerOpacity: function (layer, opacity, split) {
-      console.log(split);
       if (split) {
         layer = 1;
         var layerImages = this.getShownImages();
@@ -230,7 +238,6 @@
     getViewer: function () {
       return this.viewer;
     },
-
 
     // ----------
     startingPan: function () {
@@ -314,18 +321,25 @@
       }
     },
 
+    // clips the layer plased ont he position of the nubbing/curser
     // ----------
     dragClip: function (xPos, yPos, dragX, dragY) {
 
-      if (dragX) {
-        this.clipFactorX = (xPos +  dragItemW/2) / this.viewer.container.clientWidth;
-      }
 
-      if (dragY) {
-        this.clipFactorY = (yPos + dragItemH/2) / this.viewer.container.clientHeight;
-      }
+      //wrapped in a check to ensure that the OS viewer is visible before trying to modify
 
-      this.updateClip();
+      if ( !document.getElementById(this.viewer.id).classList.contains('hidden') ){
+        if (dragX) {
+          // findme todo: 10 + is a shim to fix a position error for the nubbin. Needs fixing
+          this.clipFactorX = (10 + xPos +  dragItemW/2) / this.viewer.container.clientWidth;
+        }
+
+        if (dragY) {
+          this.clipFactorY = (yPos + dragItemH/2) / this.viewer.container.clientHeight;
+        }
+
+        this.updateClip();
+      }
     },
 
 
@@ -343,8 +357,8 @@
       return this.images.filter(function (image) {
         return !image.isCurtain;
       });
-    }
 
+    }
   }, OpenSeadragon.EventSource.prototype);
 
   // ----------
@@ -534,7 +548,7 @@
 
       self.images.push(image);
     });
-
+    console.log('call set mode');
     this.setMode(args.mode || 'curtain');
 
 
@@ -542,6 +556,9 @@
 
   // ----------
   window.CurtainSyncViewer.prototype = OpenSeadragon.extend({
+
+    // findme note: register functions here to be exposed to the external access.
+
     // ----------
     getMode: function () {
       return this.modeKey;
@@ -549,6 +566,7 @@
 
     // ----------
     setMode: function (key, images) {
+      console.log('setMode ' + key + ' images:' + images);
       var self = this;
 
       console.assert(key === 'curtain' || key === 'sync', '[CurtainSyncViewer.setMode] Must have valid key.');
@@ -557,7 +575,7 @@
       }
 
       if (images) {
-        console.log('set mode');
+        console.log('set images');
         this.images = images;
       }
 
@@ -595,7 +613,6 @@
       this.raiseEvent('change:mode');
 
     },
-
 
     // findme added ----------
     // returns the view object
@@ -681,13 +698,18 @@
     //findme : added
     replaceImages : function (images) {
       console.log(images);
-      this.mode.replaceImages(images);
+      return this.mode.replaceImages(images);
     },
 
     // ----------
     //findme : added
     setLayerOpacity: function (level,opacity,split) {
       this.mode.setLayerOpacity(level,opacity,split);
+    },
+
+    //findme : added
+    setSplit: function () {
+      this.mode.setSplit();
     },
 
     // ----------
@@ -725,3 +747,9 @@
   }, OpenSeadragon.EventSource.prototype);
 
 })();
+
+
+
+
+//findme to do:  add cross fade while switching images OR destroy and rebuild the viewer each time and fade with jquery?
+//https://github.com/openseadragon/openseadragon/issues/1552
